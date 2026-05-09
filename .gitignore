@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+frontend/dist/
+
+# Environment files (contain API keys!)
+backend/.env
+.env
+
+# Vector store data
+backend/.store.json
+backend/data/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Docker
+.dockerignore

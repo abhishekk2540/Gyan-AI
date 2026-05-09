@@ -1,0 +1,19 @@
+{
+  "name": "ai-assistant-backend",
+  "version": "1.0.0",
+  "description": "Clean, optimized backend for AI Assistant (Chat only)",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "express-fileupload": "^1.5.2",
+    "morgan": "^1.10.0",
+    "multer": "^2.1.1",
+    "pdf-parse": "^1.1.1"
+  }
+}

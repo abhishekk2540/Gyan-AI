@@ -1,0 +1,85 @@
+name: Deploy Gyan AI to AWS
+
+on:
+  push:
+    branches: [main]          # Triggers on every push to main
+  workflow_dispatch:           # Also allows manual trigger from GitHub UI
+
+env:
+  AWS_REGION: ap-south-1       # Change to your AWS region (e.g. us-east-1)
+  ECR_BACKEND_REPO: gyan-ai-backend
+  ECR_FRONTEND_REPO: gyan-ai-frontend
+
+jobs:
+  build-and-deploy:
+    name: Build → Push to ECR → Deploy to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout code ──────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Configure AWS credentials (from GitHub Secrets) ────────
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      # ── 3. Login to Amazon ECR ────────────────────────────────────
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ── 4. Build & push BACKEND image ─────────────────────────────
+      - name: Build and push backend image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_BACKEND_REPO:$IMAGE_TAG \
+                       -t $ECR_REGISTRY/$ECR_BACKEND_REPO:latest \
+                       ./backend
+          docker push $ECR_REGISTRY/$ECR_BACKEND_REPO:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_BACKEND_REPO:latest
+          echo "BACKEND_IMAGE=$ECR_REGISTRY/$ECR_BACKEND_REPO:$IMAGE_TAG" >> $GITHUB_ENV
+
+      # ── 5. Build & push FRONTEND image ────────────────────────────
+      - name: Build and push frontend image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_FRONTEND_REPO:$IMAGE_TAG \
+                       -t $ECR_REGISTRY/$ECR_FRONTEND_REPO:latest \
+                       ./frontend
+          docker push $ECR_REGISTRY/$ECR_FRONTEND_REPO:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_FRONTEND_REPO:latest
+          echo "FRONTEND_IMAGE=$ECR_REGISTRY/$ECR_FRONTEND_REPO:$IMAGE_TAG" >> $GITHUB_ENV
+
+      # ── 6. SSH into EC2 and pull + restart containers ─────────────
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key:      ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Login to ECR from the server
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+              docker login --username AWS --password-stdin \
+              ${{ steps.login-ecr.outputs.registry }}
+
+            # Navigate to app directory
+            cd /home/ec2-user/gyan-ai
+
+            # Pull the latest images
+            docker compose pull
+
+            # Restart with zero-downtime rolling update
+            docker compose up -d --remove-orphans
+
+            # Remove dangling images to save disk space
+            docker image prune -f
