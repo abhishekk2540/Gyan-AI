@@ -9,7 +9,7 @@ import Toast from './components/Toast'
 
 const TABS = [
   { id: 'chat',   icon: '💬', label: 'Chat' },
-  { id: 'rag',    icon: '📚', label: 'Ask Docs' },
+  { id: 'rag',    icon: '📚', label: 'Docs' },
   { id: 'agent',  icon: '🤖', label: 'Agent' },
   { id: 'vision', icon: '👁️',  label: 'Vision' },
   { id: 'poster', icon: '🎨', label: 'Poster' },
@@ -38,7 +38,24 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* Sidebar */}
+      {/* Mobile Header — visible only on small screens */}
+      <header className="mobile-header">
+        <div className="mobile-header-brand">
+          <img src="/logo.png" alt="Gyan AI" />
+          <span>Gyan AI</span>
+        </div>
+        <div className="mobile-header-actions">
+          <button
+            className={`theme-btn-mobile ${theme === 'dark' ? 'active' : ''}`}
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? '🌙' : '☀️'}
+          </button>
+        </div>
+      </header>
+
+      {/* Desktop Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-logo">
           <img src="/logo.png" alt="Gyan AI" />
@@ -92,6 +109,20 @@ export default function App() {
         </div>
       </main>
 
+      {/* Mobile Bottom Tab Bar — visible only on small screens */}
+      <nav className="mobile-tab-bar">
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            className={`mobile-tab ${active === tab.id ? 'active' : ''}`}
+            onClick={() => setActive(tab.id)}
+          >
+            <span className="mobile-tab-icon">{tab.icon}</span>
+            <span className="mobile-tab-label">{tab.label}</span>
+          </button>
+        ))}
+      </nav>
+
       {/* Toasts */}
       <div className="toast-container">
         {toasts.map(t => <Toast key={t.id} msg={t.msg} type={t.type} />)}
@@ -99,3 +130,4 @@ export default function App() {
     </div>
   )
 }
+

@@ -1103,3 +1103,375 @@ html, body, #root {
   background-clip: text;
 }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE HEADER — hidden on desktop, shown on mobile
+   ═══════════════════════════════════════════════════════════════ */
+.mobile-header {
+  display: none;
+}
+
+.mobile-tab-bar {
+  display: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Tablet & small desktop (≤ 1024px) ─────────────────────── */
+@media (max-width: 1024px) {
+  .sidebar {
+    min-width: 70px;
+    width: 70px;
+    padding: 10px 6px;
+    align-items: center;
+  }
+  .nav-btn {
+    justify-content: center;
+    padding: 12px 8px;
+    font-size: 0;
+    gap: 0;
+  }
+  .nav-icon { font-size: 20px; }
+  .nav-btn.active::before { display: none; }
+  .sidebar-footer .status-dot { font-size: 0; }
+  .sidebar-footer .status-dot .dot { margin: 0 auto; }
+  .sidebar-logo img { width: 44px; height: 44px; }
+
+  .hero-main { gap: 30px; }
+  .hero-title { font-size: 2.5rem; }
+  .hero-subtitle { font-size: 1.1rem; }
+
+  .rag-layout { grid-template-columns: 260px 1fr; }
+  .vision-layout { grid-template-columns: 1fr 280px; }
+}
+
+/* ── Mobile (≤ 768px) ──────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Hide desktop sidebar */
+  .sidebar { display: none; }
+
+  /* Show mobile header */
+  .mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    flex-shrink: 0;
+  }
+  .mobile-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .mobile-header-brand img {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    object-fit: contain;
+  }
+  .mobile-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .theme-btn-mobile {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+  }
+  .theme-btn-mobile:hover,
+  .theme-btn-mobile.active {
+    border-color: var(--border-bright);
+    box-shadow: var(--glow);
+  }
+
+  /* Show mobile bottom tab bar */
+  .mobile-tab-bar {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    z-index: 100;
+    padding: 4px 0;
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+  }
+  .mobile-tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    transition: color 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-tab.active {
+    color: var(--accent);
+  }
+  .mobile-tab-icon {
+    font-size: 20px;
+    line-height: 1;
+  }
+  .mobile-tab-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  /* App layout adjustment for mobile header + bottom bar */
+  .app {
+    flex-direction: column;
+  }
+  .main {
+    flex: 1;
+    overflow: hidden;
+    padding-bottom: 60px; /* space for bottom tab bar */
+  }
+
+  /* ── Chat Tab Mobile ──────────────────────────────────────── */
+  .chat-container { padding: 12px; gap: 10px; }
+  .chat-header { flex-wrap: wrap; gap: 8px; }
+  .ml15 { font-size: 16px; }
+  .bubble { max-width: 88%; padding: 10px 14px; font-size: 13px; }
+  .chat-input-area { padding: 10px; gap: 8px; }
+  .chat-input { font-size: 14px; }
+  .send-btn { width: 36px; height: 36px; border-radius: 8px; }
+  .avatar { width: 30px; height: 30px; font-size: 14px; border-radius: 8px; }
+  .hero-line { font-size: clamp(1rem, 4vw, 1.6rem); white-space: normal; }
+
+  /* ── RAG Tab Mobile — Stack columns ───────────────────────── */
+  .rag-container { padding: 12px; gap: 10px; overflow-y: auto; }
+  .rag-layout {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+  .rag-left { overflow: visible; }
+  .upload-zone { padding: 24px 16px; }
+
+  /* ── Agent Tab Mobile ──────────────────────────────────────── */
+  .agent-container { padding: 12px; gap: 10px; }
+
+  /* ── Vision Tab Mobile — Stack columns ────────────────────── */
+  .vision-container { padding: 12px; gap: 10px; overflow-y: auto; }
+  .vision-header { flex-wrap: wrap; gap: 8px; }
+  .vision-layout {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+  .camera-wrapper { min-height: 240px; }
+  .vision-stats { grid-template-columns: 1fr 1fr; }
+
+  /* ── Poster Tab Mobile ────────────────────────────────────── */
+  .rag-container .card { padding: 14px; }
+
+  /* ── Toasts ───────────────────────────────────────────────── */
+  .toast-container {
+    bottom: 72px; /* above the bottom tab bar */
+    right: 12px;
+    left: 12px;
+  }
+  .toast {
+    min-width: unset;
+    width: 100%;
+  }
+
+  /* ── Suggestions ──────────────────────────────────────────── */
+  .suggestions { gap: 6px; }
+  .suggestion-chip { font-size: 12px; padding: 6px 12px; }
+
+  /* ── Section label ────────────────────────────────────────── */
+  .section-label { font-size: 10px; }
+
+  /* ── Cards ────────────────────────────────────────────────── */
+  .card { padding: 14px; }
+  .step-card { padding: 12px; }
+
+  /* ═══════════════════════════════════════════════════════════
+     LANDING PAGE MOBILE
+     ═══════════════════════════════════════════════════════════ */
+
+  .landing-nav { padding: 12px 5%; }
+  .landing-logo { font-size: 16px; gap: 8px; }
+  .landing-logo img { width: 36px; height: 36px; }
+  .btn-primary { padding: 8px 16px; font-size: 13px; }
+
+  /* Hero stacking */
+  .hero { padding: 32px 5%; min-height: auto; }
+  .hero-main {
+    flex-direction: column;
+    gap: 24px;
+    text-align: center;
+  }
+  .hero-content {
+    align-items: center;
+    text-align: center;
+  }
+  .hero-title {
+    font-size: 2rem;
+    text-align: center;
+  }
+  .hero-subtitle {
+    font-size: 1rem;
+    text-align: center;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 24px;
+  }
+  .hero-btns {
+    justify-content: center;
+  }
+  .btn-large {
+    padding: 12px 24px;
+    font-size: 14px;
+  }
+  .badge {
+    font-size: 12px;
+    padding: 4px 12px;
+    margin-bottom: 16px;
+  }
+
+  /* Hero banner */
+  .hero-banner {
+    height: 300px !important;
+    flex: unset;
+    width: 100%;
+  }
+  .robot-head { font-size: 56px; }
+  .robot-body { font-size: 80px; margin-top: -14px; }
+  .robot-hand { font-size: 40px; right: -20px; top: 40px; }
+  .robot-container { padding-bottom: 60px; }
+  .floating-features { gap: 10px; bottom: 20px; }
+  .float-box {
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    border-radius: 12px;
+  }
+
+  /* Features */
+  .features-section { padding: 40px 5%; }
+  .section-title { font-size: 1.6rem; margin-bottom: 32px; }
+  .features-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .feature-card {
+    padding: 24px;
+    border-radius: 16px;
+  }
+  .feature-icon { font-size: 32px; margin-bottom: 16px; }
+  .feature-card h3 { font-size: 17px; }
+  .feature-card p { font-size: 14px; }
+
+  /* FAQ */
+  .faq-section { padding: 40px 5%; }
+  .faq-item { padding: 16px; border-radius: 12px; }
+  .faq-question { font-size: 15px; }
+  .faq-answer { font-size: 14px; }
+
+  /* Footer */
+  .landing-footer { padding: 32px 5% 24px; }
+  .footer-links { gap: 16px; flex-wrap: wrap; justify-content: center; }
+}
+
+/* ── Small phones (≤ 480px) ────────────────────────────────── */
+@media (max-width: 480px) {
+  .hero-title { font-size: 1.6rem; }
+  .hero-subtitle { font-size: 0.9rem; }
+
+  .chat-container { padding: 8px; gap: 8px; }
+  .bubble { max-width: 92%; padding: 8px 12px; font-size: 13px; line-height: 1.5; }
+  .chat-input-area { padding: 8px; border-radius: 12px; }
+  .avatar { width: 26px; height: 26px; font-size: 12px; }
+  .message { gap: 8px; }
+  .ml15 { font-size: 14px; gap: 0.2em; }
+
+  .rag-container { padding: 8px; }
+  .agent-container { padding: 8px; }
+  .vision-container { padding: 8px; }
+
+  .camera-wrapper { min-height: 200px; }
+
+  .upload-zone { padding: 20px 12px; }
+  .upload-icon { font-size: 32px; }
+  .upload-zone h3 { font-size: 14px; }
+
+  .features-grid { grid-template-columns: 1fr; }
+  .feature-card { padding: 20px; }
+
+  .float-box { padding: 6px 10px; font-size: 0.75rem; }
+
+  .mobile-tab-icon { font-size: 18px; }
+  .mobile-tab-label { font-size: 9px; }
+
+  .model-badge { font-size: 11px; padding: 3px 8px; }
+
+  .step-card { padding: 10px; }
+  .step-header { font-size: 12px; }
+  .step-content { font-size: 12px; }
+
+  .vision-stats { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat-row { padding: 8px 10px; }
+  .stat-label { font-size: 9px; }
+  .stat-value { font-size: 14px; }
+
+  .detection-tag { padding: 4px 10px; font-size: 11px; }
+
+  .hero-line { font-size: clamp(0.85rem, 4.5vw, 1.3rem); }
+
+  .toast-container { bottom: 68px; right: 8px; left: 8px; }
+}
+
+/* ── Touch-friendly: ensure minimum tap targets ────────────── */
+@media (hover: none) and (pointer: coarse) {
+  .nav-btn,
+  .mobile-tab,
+  .send-btn,
+  .camera-btn,
+  .btn-primary,
+  .clear-btn,
+  .suggestion-chip,
+  .theme-btn,
+  .theme-btn-mobile {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* ── Landscape phones ──────────────────────────────────────── */
+@media (max-height: 500px) and (max-width: 900px) {
+  .hero { min-height: auto; padding: 24px 5%; }
+  .hero-banner { height: 200px !important; }
+  .robot-head { font-size: 40px; }
+  .robot-body { font-size: 60px; }
+  .floating-features { display: none; }
+  .mobile-tab-bar { padding: 2px 0; }
+  .mobile-tab { padding: 4px 0; }
+  .mobile-tab-icon { font-size: 16px; }
+  .mobile-tab-label { display: none; }
+  .main { padding-bottom: 40px; }
+}

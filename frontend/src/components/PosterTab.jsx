@@ -83,7 +83,7 @@ export default function PosterTab({ addToast }) {
           style={{ background: 'var(--bg-secondary)', padding: '12px 16px', borderRadius: '12px', border: '1px solid var(--border)' }}
         />
         <button className="btn-primary" onClick={generatePoster} disabled={loading || !prompt.trim()} style={{ height: '48px', padding: '0 24px' }}>
-          {loading ? <span className="spinner" /> : '🚀 Create'}
+          {loading ? <span className="spinner" /> :'➤'}
         </button>
       </div>
 

@@ -211,7 +211,7 @@ export default function RagTab({ addToast }) {
               disabled={!query.trim() || loading || (docs.length === 0)}
               onClick={handleQuery}
             >
-              {loading ? <span className="spinner" /> : '🔍'}
+              {loading ? <span className="spinner" /> : '➤'}
             </button>
           </div>
 
