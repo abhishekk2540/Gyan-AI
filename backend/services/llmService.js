@@ -1,6 +1,6 @@
 const API_URL        = process.env.OPENROUTER_API_URL      || 'https://openrouter.ai/api/v1/chat/completions';
-const MODEL          = process.env.LLM_MODEL               || 'openai/gpt-oss-120b:free';
-const MODEL_FALLBACK = process.env.LLM_MODEL_FALLBACK      || 'openai/gpt-oss-20b:free';
+const MODEL          = process.env.LLM_MODEL               || 'google/gemma-4-26b-a4b-it:free';
+const MODEL_FALLBACK = process.env.LLM_MODEL_FALLBACK      || 'nvidia/nemotron-3.5-lightning:free';
 const VISION_MODEL   = process.env.LLM_VISION_MODEL        || 'openai/gpt-4o-mini';
 
 /**

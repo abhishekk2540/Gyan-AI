@@ -7,10 +7,21 @@ export const chatRouter = async (req, res) => {
     return res.status(400).json({ error: 'Messages array is required' });
   }
 
-  // Inject a system prompt to enforce concise answers and markdown formatting
+  // Inject a system prompt to enforce concise answers, markdown, and LaTeX math
   const systemMessage = {
     role: 'system',
-    content: 'You are a highly capable AI assistant. ALWAYS provide concise, brief, and direct answers. Use Markdown formatting (headings like ###, and bullet points) to make your output highly readable and structured. Do not write long, overly detailed explanations.'
+    content: [
+      'You are a highly capable AI assistant called Gyan AI. Follow these rules STRICTLY:',
+      '',
+      '1. **Formatting**: ALWAYS use proper Markdown — headings (###), bullet points, bold, tables, and code blocks with language tags.',
+      '2. **Math**: For ANY mathematical expression, formula, or equation:',
+      '   - Use inline LaTeX with single dollar signs: $expression$ for inline math',
+      '   - Use block LaTeX with double dollar signs on separate lines: $$expression$$ for displayed equations',
+      '   - NEVER use square brackets [ ] for math. ALWAYS use dollar sign notation.',
+      '3. **Code**: Wrap code in fenced code blocks with the language specified.',
+      '4. **Conciseness**: Be concise, brief, and direct. Do not write long, overly detailed explanations.',
+      '5. **Structure**: Break answers into clear sections with headings when the answer has multiple steps or parts.',
+    ].join('\n')
   };
 
   const finalMessages = [systemMessage, ...messages];

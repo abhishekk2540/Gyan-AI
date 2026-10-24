@@ -2,6 +2,10 @@ import { useState, useRef, useEffect } from 'react'
 import AnimatedTitle from './AnimatedTitle'
 import TypingText from './TypingText'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 
 const SUGGESTIONS = [
   'Explain what is a neural network',
@@ -143,7 +147,44 @@ export default function ChatTab({ addToast }) {
                 {m.role === 'user' ? (
                   m.content
                 ) : (
-                  <ReactMarkdown>{m.content}</ReactMarkdown>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkMath]}
+                    rehypePlugins={[rehypeKatex]}
+                    components={{
+                      // Custom code block rendering with copy button
+                      code({ node, inline, className, children, ...props }) {
+                        const match = /language-(\w+)/.exec(className || '')
+                        if (!inline && match) {
+                          return (
+                            <div className="code-block-wrapper">
+                              <div className="code-block-header">
+                                <span className="code-lang">{match[1]}</span>
+                                <button
+                                  className="code-copy-btn"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(String(children).replace(/\n$/, ''))
+                                    addToast('Copied to clipboard!', 'success')
+                                  }}
+                                >
+                                  📋 Copy
+                                </button>
+                              </div>
+                              <pre className={className} {...props}>
+                                <code>{children}</code>
+                              </pre>
+                            </div>
+                          )
+                        }
+                        return (
+                          <code className={`inline-code ${className || ''}`} {...props}>
+                            {children}
+                          </code>
+                        )
+                      },
+                    }}
+                  >
+                    {m.content}
+                  </ReactMarkdown>
                 )}
               </div>
             </div>

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import AnimatedTitle from './AnimatedTitle'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 const TOOLS = [
   { id: 'calculator', icon: '🧮', label: 'Calculator' },
@@ -127,7 +128,7 @@ export default function AgentTab({ addToast }) {
                     {s.tool && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{s.tool}</span>}
                   </div>
                   <div className="step-content agent-markdown">
-                    <ReactMarkdown>{s.content}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{s.content}</ReactMarkdown>
                   </div>
                   {s.code && <div className="step-code">{s.code}</div>}
                 </div>
@@ -160,7 +161,7 @@ export default function AgentTab({ addToast }) {
           >
             <div className="section-label">Final Answer</div>
             <div className="agent-markdown" style={{ fontSize: 15, color: 'var(--text-primary)', lineHeight: 1.7 }}>
-              <ReactMarkdown>{answer}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
             </div>
           </div>
         )}

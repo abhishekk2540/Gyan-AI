@@ -276,6 +276,41 @@ html, body, #root {
 .bubble ul, .bubble ol { margin: 6px 0 10px 20px; padding: 0; }
 .bubble li { margin-bottom: 4px; }
 
+/* Table styling for Markdown */
+.bubble table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.bubble th {
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--accent);
+  padding: 10px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.bubble td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.bubble tr:last-child td {
+  border-bottom: none;
+}
+
+.bubble tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
 .typing-indicator { display: flex; gap: 5px; padding: 4px 0; }
 .typing-indicator span {
   width: 8px; height: 8px; border-radius: 50%;
@@ -620,12 +655,164 @@ html, body, #root {
 /* Divider */
 .divider { height: 1px; background: var(--border); margin: 4px 0; }
 
-/* Code block in chat */
-.bubble pre {
-  background: rgba(0,0,0,0.35); border-radius: 8px; padding: 12px;
-  overflow-x: auto; margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px;
+/* Code block wrapper with header */
+.code-block-wrapper {
+  margin: 12px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.4);
 }
-.bubble code { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border);
+}
+
+.code-lang {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  font-family: 'Inter', sans-serif;
+}
+
+.code-copy-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+}
+
+.code-copy-btn:hover {
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--accent);
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.code-block-wrapper pre {
+  margin: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  padding: 14px !important;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.code-block-wrapper code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* Inline code */
+.inline-code {
+  background: rgba(139, 92, 246, 0.12);
+  color: var(--accent);
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.88em;
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  white-space: nowrap;
+}
+
+/* Fallback for bubble code (non-wrapped) */
+.bubble pre {
+  background: rgba(0,0,0,0.35);
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 8px 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.bubble code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+}
+
+/* ── KaTeX Math Rendering ── */
+.bubble .katex-display {
+  margin: 16px 0;
+  padding: 14px 18px;
+  background: rgba(139, 92, 246, 0.06);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.bubble .katex-display > .katex {
+  font-size: 1.15em;
+  color: var(--text-primary);
+}
+
+.bubble .katex {
+  font-size: 1.05em;
+  color: var(--text-primary);
+}
+
+/* Fix KaTeX colors for dark mode */
+.bubble .katex .mord,
+.bubble .katex .mop,
+.bubble .katex .mrel,
+.bubble .katex .mbin,
+.bubble .katex .mpunct,
+.bubble .katex .mopen,
+.bubble .katex .mclose,
+.bubble .katex .minner,
+.bubble .katex .mfrac,
+.bubble .katex .msupsub {
+  color: var(--text-primary);
+}
+
+/* Light theme overrides for KaTeX */
+:root.light-theme .bubble .katex-display {
+  background: rgba(139, 92, 246, 0.05);
+  border-color: rgba(139, 92, 246, 0.12);
+}
+
+/* Blockquote styling */
+.bubble blockquote {
+  margin: 10px 0;
+  padding: 10px 16px;
+  border-left: 3px solid var(--accent);
+  background: rgba(139, 92, 246, 0.06);
+  border-radius: 0 8px 8px 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Strong / Bold emphasis in bubbles */
+.bubble strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Horizontal rule */
+.bubble hr {
+  border: none;
+  height: 1px;
+  background: var(--border);
+  margin: 14px 0;
+}
 
 /* Landing Page Styles */
 .landing-page {

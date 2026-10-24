@@ -135,7 +135,7 @@ export default function LandingPage({ onGetStarted }) {
             <img src="/logo.png" alt="Gyan AI" />
             <h3>Gyan AI</h3>
           </div>
-          <p>© 2024 Gyan AI OS. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Gyan AI OS. All rights reserved.</p>
           <div className="footer-links">
             <a href="#">Privacy</a>
             <a href="#">Terms</a>

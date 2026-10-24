@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import AnimatedTitle from './AnimatedTitle'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 export default function RagTab({ addToast }) {
   const [docs, setDocs]       = useState([])
@@ -230,7 +231,7 @@ export default function RagTab({ addToast }) {
               <div ref={answerRef} className="card" style={{ animation: 'fadeUp 0.3s ease', flexShrink: 0 }}>
                 <div className="section-label">Answer</div>
                 <div style={{ fontSize: 14, lineHeight: 1.8, color: 'var(--text-primary)' }}>
-                  <ReactMarkdown>{answer}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
                 </div>
               </div>
             )}
