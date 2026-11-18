@@ -1,154 +1,84 @@
 import { useState } from 'react'
-import AnimatedTitle from './AnimatedTitle'
-import TypingText from './TypingText'
+import { ArrowDownToLine, ArrowUp, ArrowUpRight, Image as ImageIcon, LoaderCircle, RotateCcw, Sparkles, WandSparkles } from 'lucide-react'
+import { apiUrl } from '../lib/api'
+
+const PROMPT_IDEAS = [
+  { label: 'Travel print', prompt: 'A vintage travel poster for a quiet coastal town, hand-painted lettering, sun-faded colors, editorial composition' },
+  { label: 'Botanical study', prompt: 'A botanical illustration of a wildflower meadow, fine ink outlines, soft natural pigments, archival paper' },
+  { label: 'Modern abstract', prompt: 'An abstract composition inspired by folded paper and warm afternoon light, restrained palette, tactile texture' },
+]
 
 export default function PosterTab({ addToast }) {
   const [prompt, setPrompt] = useState('')
-  const [imageUrl, setImageUrl] = useState(null)
+  const [imageUrl, setImageUrl] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState('')
 
   const generatePoster = async () => {
-    if (!prompt.trim()) return
+    if (!prompt.trim() || loading) return
     setLoading(true)
-    setError(null)
-    setImageUrl(null)
-    
+    setError('')
+    setImageUrl('')
     try {
-      const response = await fetch('/api/poster/generate', {
+      const response = await fetch(apiUrl('/api/poster/generate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt.trim() })
+        body: JSON.stringify({ prompt: prompt.trim() }),
       })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Backend error')
-      }
-
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || `Poster generation failed (${response.status}).`)
+      if (!data.image) throw new Error('The image service returned no poster.')
       setImageUrl(data.image)
+      addToast('Your poster is ready')
+    } catch (generationError) {
+      setError(generationError.message || 'Could not generate the poster. Please try again.')
+      addToast(generationError.message || 'Poster generation failed', 'error')
+    } finally {
       setLoading(false)
-      addToast('Poster ready! ✨')
-    } catch (err) {
-      console.error('[Poster Error]:', err)
-      setLoading(false)
-      setError(err.message)
-      addToast('Service is busy. Please try again.', 'error')
     }
   }
 
-  const handleDownload = () => {
+  const downloadPoster = () => {
     if (!imageUrl) return
     const link = document.createElement('a')
     link.href = imageUrl
-    link.download = `GyanAI_Poster_${Date.now()}.jpg`
+    link.download = `gyan-poster-${Date.now()}.jpg`
+    link.target = '_blank'
+    link.rel = 'noreferrer'
     document.body.appendChild(link)
     link.click()
-    document.body.removeChild(link)
-    addToast('Download started! 📥')
-  }
-
-  const handleView = () => {
-    if (!imageUrl) return
-    const newWindow = window.open()
-    newWindow.document.write(`
-      <html>
-        <head><title>Gyan AI - Full View</title></head>
-        <body style="margin:0; background:#0a0a0f; display:flex; align-items:center; justify-content:center; height:100vh;">
-          <img src="${imageUrl}" style="max-width:95%; max-height:95%; border-radius:12px; box-shadow:0 20px 50px rgba(0,0,0,0.8);">
-        </body>
-      </html>
-    `)
+    link.remove()
   }
 
   return (
-    <div className="rag-container">
-      <div className="chat-header">
-        <AnimatedTitle title="Poster Maker" accentWord="Maker" />
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <div className="model-badge">🎨 Flux Engine</div>
-          <button className="clear-btn" onClick={() => { setPrompt(''); setImageUrl(null); setError(null); }}>🗑️ Clear</button>
-        </div>
-      </div>
-      
-      <div className="card" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-        <input 
-          type="text" 
-          className="chat-input" 
-          placeholder="Describe the poster... e.g. 'Cyberpunk samurai in a neon Tokyo street'"
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') generatePoster() }}
-          style={{ background: 'var(--bg-secondary)', padding: '12px 16px', borderRadius: '12px', border: '1px solid var(--border)' }}
-        />
-        <button className="btn-primary" onClick={generatePoster} disabled={loading || !prompt.trim()} style={{ height: '48px', padding: '0 24px' }}>
-          {loading ? <span className="spinner" /> :'➤'}
-        </button>
+    <section className="poster-workspace workspace-view page-frame">
+      <div className="page-heading">
+        <div><p className="eyebrow">Poster Studio</p><h1>Make something visual</h1><p className="page-description">Describe the image you have in mind. Refine your prompt and generate another variation whenever you like.</p></div>
       </div>
 
-      {error && !loading && (
-        <div className="card" style={{ textAlign: 'center', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)', animation: 'fadeUp 0.3s ease' }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>⚠️</div>
-          <div style={{ color: 'var(--error)', fontWeight: 600, marginBottom: 8 }}>Service Busy</div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>{error}</div>
-          <button className="btn-primary" onClick={generatePoster} style={{ background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)' }}>
-            🔁 Retry
-          </button>
-        </div>
-      )}
-
-      {imageUrl && !loading && (
-        <div className="card" style={{ textAlign: 'center', animation: 'fadeUp 0.4s ease', background: 'rgba(0,0,0,0.2)' }}>
-          <div className="section-label" style={{ marginBottom: 12 }}>Generated Masterpiece</div>
-          <img 
-            src={imageUrl} 
-            alt="Generated Poster" 
-            style={{ 
-              maxWidth: '100%', 
-              maxHeight: '300px', 
-              borderRadius: '16px', 
-              boxShadow: '0 20px 40px rgba(0,0,0,0.5)', 
-              border: '1px solid var(--border)'
-            }} 
-          />
-          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '12px' }}>
-            <button onClick={handleView} className="btn-primary" style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border)' }}>
-              🔍 View Full Size
-            </button>
-            <button className="btn-primary" onClick={handleDownload}>
-              📥 Download
-            </button>
+      <div className="poster-workspace-grid">
+        <div className="poster-prompt-column">
+          <div className="poster-prompt-panel">
+            <label htmlFor="poster-prompt" className="field-label">Your prompt</label>
+            <textarea id="poster-prompt" className="poster-prompt-input" value={prompt} rows={6} maxLength={1200} placeholder="A quiet seaside bookshop at dusk, drawn as a vintage travel print…" onChange={event => setPrompt(event.target.value)} onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') generatePoster() }} />
+            <div className="prompt-footer"><span>{prompt.length}/1200</span><span>Describe subject, mood, style, and composition.</span></div>
+            <button className="primary-button poster-generate-button" onClick={generatePoster} disabled={!prompt.trim() || loading}>{loading ? <LoaderCircle size={16} className="spin-icon" /> : <WandSparkles size={16} />}{loading ? 'Creating poster…' : 'Generate poster'}<ArrowUp size={15} className="generate-arrow" /></button>
+            {error && <div className="poster-error"><span>{error}</span><button onClick={generatePoster} disabled={loading}><RotateCcw size={14} />Try again</button></div>}
+          </div>
+          <div className="prompt-ideas">
+            <div className="ideas-heading"><Sparkles size={15} /><span>Prompt ideas</span></div>
+            {PROMPT_IDEAS.map(idea => <button key={idea.label} onClick={() => { setPrompt(idea.prompt); setError('') }}><span>{idea.label}</span><ArrowUpRight size={14} className="idea-arrow" /></button>)}
           </div>
         </div>
-      )}
 
-      {!imageUrl && !loading && !error && (
-        <div className="empty-state" style={{ marginTop: '40px' }}>
-          <div className="big-icon">🎨</div>
-          <TypingText
-            text="AI Poster Generator"
-            className="welcome-title"
-            speed={80}
-          />
-          <p style={{ fontSize: 14, color: 'var(--text-muted)', maxWidth: 320, textAlign: 'center', lineHeight: 1.6 }}>
-            Enter a detailed prompt above to generate high-quality posters using the <b>Flux.1</b> model.
-          </p>
-          <div className="suggestions" style={{ marginTop: '20px' }}>
-            <button className="suggestion-chip" onClick={() => { setPrompt('Vintage travel poster of Mars with 1950s aesthetic'); }}>🚀 Mars Travel</button>
-            <button className="suggestion-chip" onClick={() => { setPrompt('Cyberpunk city skyline with purple and cyan neon lights'); }}>🏙️ Cyberpunk City</button>
-            <button className="suggestion-chip" onClick={() => { setPrompt('Minimalist abstract oil painting of a lonely mountain'); }}>🏔️ Abstract Mountain</button>
+        <div className="poster-preview-column">
+          <div className="poster-preview-heading"><span>Preview</span>{imageUrl && <button className="quiet-button" onClick={downloadPoster}><ArrowDownToLine size={15} />Download</button>}</div>
+          <div className={`poster-canvas ${imageUrl ? 'has-poster' : ''}`}>
+            {imageUrl ? <img src={imageUrl} alt="AI generated poster" /> : loading ? <div className="poster-loading"><span className="poster-loading-art"><ImageIcon size={24} /></span><LoaderCircle size={19} className="spin-icon" /><span>Creating your image</span><small>This can take a moment.</small></div> : <div className="poster-empty"><span className="poster-empty-icon"><ImageIcon size={22} /></span><h2>Your poster will appear here</h2><p>Start with a prompt, then shape another variation to explore a different direction.</p></div>}
           </div>
+          {imageUrl && <div className="poster-result-footer"><span><ImageIcon size={14} />Generated image</span><button className="text-action" onClick={generatePoster} disabled={loading}><RotateCcw size={14} />Generate another</button></div>}
         </div>
-      )}
-
-      {loading && (
-        <div className="empty-state" style={{ marginTop: '40px' }}>
-          <div className="spinner" style={{ width: '40px', height: '40px', borderWidth: '3px', marginBottom: '20px' }} />
-          <h3>Generating your poster...</h3>
-          <p>The AI is currently painting your masterpiece. This usually takes 10-30 seconds.</p>
-        </div>
-      )}
-    </div>
+      </div>
+    </section>
   )
 }

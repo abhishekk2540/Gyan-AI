@@ -1,171 +1,95 @@
-import { useState, useRef, useEffect } from 'react'
-import AnimatedTitle from './AnimatedTitle'
+import { useRef, useState } from 'react'
+import { Calculator, Check, Globe2, LoaderCircle, ArrowUp, RotateCcw, Search } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-
-const TOOLS = [
-  { id: 'calculator', icon: '🧮', label: 'Calculator' },
-  { id: 'web_search', icon: '🌐', label: 'Web Search' },
-]
+import { apiUrl } from '../lib/api'
 
 const EXAMPLES = [
-  'What is 2847 × 963?',
-  'Search: Who is the CEO of OpenAI?',
-  'Calculate the square root of 144',
-  'Search: Latest AI news 2025',
+  'Compare two approaches to learning a new language',
+  'What are the latest developments in renewable energy?',
+  'Calculate the monthly payment on a $24,000 loan at 6% for 5 years',
 ]
 
 export default function AgentTab({ addToast }) {
-  const [query, setQuery]   = useState('')
-  const [steps, setSteps]   = useState([])
-  const [answer, setAnswer] = useState(null)
+  const [query, setQuery] = useState('')
+  const [steps, setSteps] = useState([])
+  const [answer, setAnswer] = useState('')
   const [loading, setLoading] = useState(false)
+  const answerRef = useRef(null)
 
-  // Ref to auto-scroll to the answer when it appears
-  const answerRef  = useRef(null)
-  const scrollArea = useRef(null)
-
-  // Scroll to bottom whenever steps grow or answer arrives
-  useEffect(() => {
-    if (scrollArea.current) {
-      scrollArea.current.scrollTop = scrollArea.current.scrollHeight
-    }
-  }, [steps, answer])
-
-  const runAgent = async (text) => {
-    const q = text || query.trim()
-    if (!q || loading) return
-    setQuery(text ? text : query)
-    setSteps([]); setAnswer(null); setLoading(true)
-
+  const runAgent = async text => {
+    const task = (text ?? query).trim()
+    if (!task || loading) return
+    setQuery(task)
+    setSteps([])
+    setAnswer('')
+    setLoading(true)
     try {
-      const res = await fetch('/api/agent/run', {
+      const response = await fetch(apiUrl('/api/agent/run'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q }),
+        body: JSON.stringify({ query: task }),
       })
-      if (!res.ok) throw new Error()
-      const data = await res.json()
-      // Animate steps in one by one
-      for (let i = 0; i < (data.steps || []).length; i++) {
-        await new Promise(r => setTimeout(r, 400))
-        setSteps(prev => [...prev, data.steps[i]])
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || `Research failed (${response.status}).`)
+
+      const returnedSteps = data.steps || []
+      for (let index = 0; index < returnedSteps.length; index += 1) {
+        await new Promise(resolve => window.setTimeout(resolve, 320))
+        setSteps(previous => [...previous, returnedSteps[index]])
       }
-      setAnswer(data.answer)
-    } catch {
-      setSteps([{ type: 'result', content: '⚠️ Backend not connected. Start your Express server.' }])
-      addToast('Backend not connected', 'error')
+      setAnswer(data.answer || 'The agent did not return a final answer.')
+      window.setTimeout(() => answerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80)
+    } catch (error) {
+      setSteps([{ type: 'result', content: error.message || 'The research service could not be reached.' }])
+      addToast(error.message || 'Web research failed', 'error')
     } finally {
       setLoading(false)
     }
   }
 
+  const reset = () => { if (!loading) { setQuery(''); setSteps([]); setAnswer('') } }
+
   return (
-    <div className="agent-container">
-      {/* Header */}
-      <div className="chat-header" style={{ flexShrink: 0 }}>
-        <AnimatedTitle title="AI Agent" accentWord="Agent" />
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <div className="model-badge">⚡ ReAct Lite</div>
-          <button className="clear-btn" onClick={() => { setSteps([]); setAnswer(null); setQuery('') }}>🗑️ Clear</button>
-        </div>
+    <section className="agent-workspace workspace-view page-frame">
+      <div className="page-heading agent-heading">
+        <div><p className="eyebrow">Web Research</p><h1>Give a question some room</h1><p className="page-description">The research agent can search the web, use a calculator, and bring its findings together.</p></div>
+        {(steps.length > 0 || answer) && <button className="quiet-button" onClick={reset} disabled={loading}><RotateCcw size={15} />New task</button>}
       </div>
 
-      {/* Tool pills */}
-      <div style={{ flexShrink: 0 }}>
-        <div className="section-label">Available Tools</div>
-        <div className="tool-pills">
-          {TOOLS.map(t => (
-            <div key={t.id} className="tool-pill active">
-              {t.icon} {t.label}
-            </div>
-          ))}
-        </div>
+      <div className="agent-tool-row">
+        <span className="tool-row-label">Available tools</span>
+        <span className="tool-chip"><Globe2 size={15} />Web search</span>
+        <span className="tool-chip"><Calculator size={15} />Calculator</span>
+        <span className="tool-row-note">The agent decides when a tool is useful.</span>
       </div>
 
-      {/* Input — always visible, pinned above scroll area */}
-      <div className="chat-input-area" style={{ flexShrink: 0 }}>
-        <textarea
-          id="agent-query-input"
-          className="chat-input"
-          placeholder="Ask the agent something… e.g. What is 42 × 58?"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); runAgent() } }}
-          rows={1}
-        />
-        <button id="agent-run-btn" className="send-btn" disabled={!query.trim() || loading} onClick={() => runAgent()}>
-          {loading ? <span className="spinner" /> : '▶'}
-        </button>
+      <div className="agent-request-card">
+        <textarea className="agent-input" value={query} rows={2} placeholder="Describe what you would like to research…" onChange={event => { setQuery(event.target.value); event.target.style.height = 'auto'; event.target.style.height = `${Math.min(event.target.scrollHeight, 160)}px` }} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); runAgent() } }} disabled={loading} />
+        <div className="agent-request-footer"><span>Clear, specific tasks tend to produce the best results.</span><button className="send-button" onClick={() => runAgent()} disabled={!query.trim() || loading} aria-label="Run research task">{loading ? <LoaderCircle size={17} className="spin-icon" /> : <ArrowUp size={18} />}</button></div>
       </div>
 
-      {/* ── Scrollable results area ───────────────────────────── */}
-      <div className="agent-scroll-area" ref={scrollArea}>
-
-        {/* Examples — only when idle */}
-        {steps.length === 0 && !loading && (
-          <div>
-            <div className="section-label">Try these</div>
-            <div className="suggestions">
-              {EXAMPLES.map(e => (
-                <button key={e} className="suggestion-chip" onClick={() => runAgent(e)}>{e}</button>
-              ))}
+      <div className="agent-results">
+        {!steps.length && !answer && !loading ? (
+          <div className="research-start"><div className="research-start-heading"><Search size={16} /><span>Ideas to get started</span></div><div className="research-examples">{EXAMPLES.map(example => <button key={example} onClick={() => runAgent(example)}>{example}<ArrowUp size={14} /></button>)}</div></div>
+        ) : (
+          <div className="research-report">
+            {(steps.length > 0 || loading) && <div className="report-section-heading"><span>Research activity</span>{loading && <span className="running-label"><LoaderCircle size={13} className="spin-icon" />Working</span>}</div>}
+            <div className="research-timeline">
+              {steps.map((step, index) => {
+                const StepIcon = step.type === 'tool' ? Globe2 : step.type === 'result' ? Check : Search
+                const title = step.type === 'tool' ? (step.tool || 'Tool call') : step.type === 'result' ? 'Result' : 'Reasoning'
+                return <article key={index} className={`timeline-step ${step.type}`}>
+                  <div className="timeline-marker"><StepIcon size={15} /></div>
+                  <div className={`timeline-content ${step.type === 'result' ? 'timeline-output-box' : ''}`}><div className="timeline-title">{title}</div><div className="markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{step.content}</ReactMarkdown></div>{step.code && <pre className="timeline-code">{step.code}</pre>}</div>
+                </article>
+              })}
+              {loading && <div className="timeline-step pending"><div className="timeline-marker"><LoaderCircle size={15} className="spin-icon" /></div><div className="timeline-content"><div className="timeline-title">Working through the task</div><div className="pending-line" /></div></div>}
             </div>
-          </div>
-        )}
-
-        {/* Steps */}
-        {(steps.length > 0 || loading) && (
-          <div>
-            <div className="section-label">Agent Thinking</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {steps.map((s, i) => (
-                <div key={i} className="step-card">
-                  <div className="step-header">
-                    <span className={`step-type ${s.type}`}>
-                      {s.type === 'thought' ? '💭 Thought' : s.type === 'tool' ? '🔧 Tool Call' : '✅ Result'}
-                    </span>
-                    {s.tool && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{s.tool}</span>}
-                  </div>
-                  <div className="step-content agent-markdown">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{s.content}</ReactMarkdown>
-                  </div>
-                  {s.code && <div className="step-code">{s.code}</div>}
-                </div>
-              ))}
-
-              {loading && (
-                <div className="step-card">
-                  <div className="step-header">
-                    <span className="step-type thought">💭 Thinking…</span>
-                  </div>
-                  <div className="typing-indicator">
-                    <span /><span /><span />
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Final answer — auto-scrolls into view */}
-        {answer && (
-          <div
-            ref={answerRef}
-            className="card"
-            style={{
-              borderColor: 'rgba(16,185,129,0.3)',
-              background: 'rgba(16,185,129,0.05)',
-              animation: 'fadeUp 0.3s ease'
-            }}
-          >
-            <div className="section-label">Final Answer</div>
-            <div className="agent-markdown" style={{ fontSize: 15, color: 'var(--text-primary)', lineHeight: 1.7 }}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
-            </div>
+            {answer && <article className="research-answer" ref={answerRef}><div className="answer-label">Summary</div><div className="markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown></div></article>}
           </div>
         )}
       </div>
-    </div>
+    </section>
   )
 }

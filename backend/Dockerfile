@@ -23,7 +23,7 @@ USER appuser
 
 EXPOSE 3001
 
-# Health check — AWS ECS/ALB uses this
+# Health check for Docker Compose and container hosts
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:3001/health || exit 1
 

@@ -1,10 +1,12 @@
 import { createRequire } from 'module';
+import path from 'node:path';
 import { generateEmbedding } from '../services/embeddings.js';
 import { addDocumentChunks, searchSimilar } from '../services/vectorStore.js';
 import { streamChat } from '../services/llmService.js';
 
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse');
+const mammoth = require('mammoth');
 
 // Helper to chunk text logically
 const chunkText = (text, size = 600, overlap = 150) => {
@@ -25,11 +27,24 @@ export const ragUploadRouter = async (req, res) => {
     const uploadedFile = req.files.file;
     console.log(`[RAG] Processing upload: ${uploadedFile.name}...`);
 
-    // Extract text from the PDF buffer
-    const pdfData = await pdfParse(uploadedFile.data);
-    const text = pdfData.text.replace(/\n/g, ' ').trim();
+    const extension = path.extname(uploadedFile.name).toLowerCase();
+    let text = '';
 
-    if (!text) return res.status(400).json({ error: 'PDF is empty or unreadable' });
+    if (extension === '.pdf') {
+      const pdfData = await pdfParse(uploadedFile.data);
+      text = pdfData.text;
+    } else if (extension === '.docx') {
+      const documentData = await mammoth.extractRawText({ buffer: uploadedFile.data });
+      text = documentData.value;
+    } else if (extension === '.txt') {
+      text = uploadedFile.data.toString('utf8');
+    } else {
+      return res.status(400).json({ error: 'Supported file types are PDF, DOCX, and TXT' });
+    }
+
+    text = text.replace(/\s+/g, ' ').trim();
+
+    if (!text) return res.status(400).json({ error: 'Document is empty or unreadable' });
 
     // Split into overlapping chunks
     const chunks = chunkText(text).filter(c => c.trim());

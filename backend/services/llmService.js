@@ -165,7 +165,10 @@ export const analyzeImage = async (base64Image, prompt = "Describe this image co
             ]
           }
         ],
-        stream: false
+        stream: false,
+        // Image descriptions are short; keep the budget below OpenRouter's
+        // credit-dependent maximum instead of reserving the model's 16k cap.
+        max_tokens: 1024
       }),
     });
 

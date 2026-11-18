@@ -1,242 +1,333 @@
-import { useState, useRef, useEffect } from 'react'
-import AnimatedTitle from './AnimatedTitle'
-import TypingText from './TypingText'
+import { useEffect, useRef, useState } from 'react'
+import {
+  ArrowUp, BookOpen, Check, ChevronRight, Copy, FileText, Globe2, Image as ImageIcon,
+  LoaderCircle, Paperclip, RotateCcw, ScanEye, Square,
+} from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
+import rehypeHighlight from 'rehype-highlight'
 import 'katex/dist/katex.min.css'
+import { apiUrl } from '../lib/api'
 
 const SUGGESTIONS = [
-  'Explain what is a neural network',
-  'Write a Python bubble sort',
-  'What is RAG in AI?',
-  'How does Ollama work locally?',
+  { label: 'Explain a concept', prompt: 'Explain a difficult concept in clear, simple terms.' },
+  { label: 'Help me write', prompt: 'Help me draft a thoughtful, polished message.' },
+  { label: 'Explore an idea', prompt: 'Help me think through an idea and its possibilities.' },
 ]
 
-export default function ChatTab({ addToast }) {
-  const [messages, setMessages]   = useState([])
-  const [input, setInput]         = useState('')
-  const [loading, setLoading]     = useState(false)
+const WORKSPACES = [
+  { id: 'rag', label: 'Ask your documents', detail: 'Search PDFs in your knowledge base', icon: FileText },
+  { id: 'agent', label: 'Research the web', detail: 'Run a web-assisted research task', icon: Globe2 },
+  { id: 'vision', label: 'Analyze an image', detail: 'Describe a photo or camera frame', icon: ScanEye },
+  { id: 'poster', label: 'Create a poster', detail: 'Generate an image from a prompt', icon: ImageIcon },
+]
+
+export default function ChatTab({ conversation, onCreateConversation, onConversationUpdate, onNavigate, addToast }) {
+  const [messages, setMessages] = useState(conversation?.messages || [])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false)
+  const [copiedMessage, setCopiedMessage] = useState(null)
+  const messagesRef = useRef(messages)
+  const conversationIdRef = useRef(conversation?.id || null)
   const bottomRef = useRef(null)
+  const textareaRef = useRef(null)
+  const fileRef = useRef(null)
   const abortCtrlRef = useRef(null)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    conversationIdRef.current = conversation?.id || null
+    const nextMessages = conversation?.messages || []
+    messagesRef.current = nextMessages
+    setMessages(nextMessages)
+  }, [conversation?.id])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [messages, loading])
 
-  const sendMessage = async (text) => {
-    const content = text || input.trim()
+  const commitMessages = (id, nextMessages) => {
+    messagesRef.current = nextMessages
+    setMessages(nextMessages)
+    if (id) onConversationUpdate(id, nextMessages)
+  }
+
+  const sendMessage = async (text, options = {}) => {
+    const content = (text ?? input).trim()
     if (!content || loading) return
     setInput('')
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
-    const userMsg = { role: 'user', content }
-    const history = [...messages, userMsg]
-    setMessages(history)
+    const baseMessages = options.baseMessages ?? messagesRef.current
+    const userMessages = options.addUser === false
+      ? baseMessages
+      : [...baseMessages, { role: 'user', content }]
+    let conversationId = conversationIdRef.current
+    if (!conversationId) {
+      conversationId = onCreateConversation(content, userMessages)
+      conversationIdRef.current = conversationId
+    }
+    const requestMessages = userMessages
+    commitMessages(conversationId, [...userMessages, { role: 'assistant', content: '' }])
     setLoading(true)
-
     abortCtrlRef.current = new AbortController()
 
-    const attemptFetch = async (attempt) => {
-      const res = await fetch('/api/chat', {
+    const streamResponse = async () => {
+      const res = await fetch(apiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history }),
-        signal: abortCtrlRef.current.signal
+        body: JSON.stringify({ messages: requestMessages }),
+        signal: abortCtrlRef.current.signal,
       })
-      if (!res.ok) throw new Error('Backend error')
 
-      // Streaming via ReadableStream
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error.error || `The assistant could not respond (${res.status}).`)
+      }
+
+      const contentType = res.headers.get('content-type') || ''
+      if (contentType.includes('application/json')) {
+        const data = await res.json()
+        const next = [...userMessages, { role: 'assistant', content: data.error || '' }]
+        commitMessages(conversationId, next)
+        return
+      }
+
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
-      let aiContent = ''
+      let buffer = ''
+      let assistantText = ''
+      let doneSignal = false
 
-      if (attempt === 1) {
-        setMessages(prev => [...prev, { role: 'assistant', content: '' }])
+      const readEvent = eventText => {
+        const data = eventText.split(/\r?\n/)
+          .filter(line => line.startsWith('data:'))
+          .map(line => line.slice(5).trimStart())
+          .join('\n')
+        if (!data) return
+        if (data.trim() === '[DONE]') { doneSignal = true; return }
+        try {
+          const event = JSON.parse(data)
+          assistantText += event.content || event.delta || ''
+        } catch { /* Ignore non-JSON keep-alive events. */ }
       }
 
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n').filter(l => l.startsWith('data: '))
-        for (const line of lines) {
-          const data = line.slice(6)
-          if (data === '[DONE]') break
-          try {
-            const json = JSON.parse(data)
-            const delta = json.delta || json.content || ''
-            aiContent += delta
-            setMessages(prev => {
-              const updated = [...prev]
-              updated[updated.length - 1] = { role: 'assistant', content: aiContent }
-              return updated
-            })
-          } catch { /* non-json chunk */ }
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+        const events = buffer.split(/\r?\n\r?\n/)
+        buffer = events.pop() || ''
+        events.forEach(readEvent)
+        if (assistantText) {
+          commitMessages(conversationId, [...userMessages, { role: 'assistant', content: assistantText }])
         }
+        if (done || doneSignal) break
       }
+      if (buffer.trim()) readEvent(buffer)
+      if (assistantText) commitMessages(conversationId, [...userMessages, { role: 'assistant', content: assistantText }])
     }
 
     try {
       try {
-        await attemptFetch(1)
-      } catch (firstErr) {
-        if (firstErr.name === 'AbortError') throw firstErr
-        // Silent retry — proxy may have needed a warm-up
-        console.warn('[Chat] First attempt failed, retrying…', firstErr.message)
-        await new Promise(r => setTimeout(r, 600))
-        await attemptFetch(2)
+        await streamResponse()
+      } catch (firstError) {
+        if (firstError.name === 'AbortError') throw firstError
+        console.warn('[Chat] Request failed, retrying once:', firstError.message)
+        await new Promise(resolve => window.setTimeout(resolve, 500))
+        await streamResponse()
       }
-    } catch (err) {
-      if (err.name === 'AbortError') return // Silent exit if stopped manually
-
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: '⚠️ Could not reach the backend. Make sure your Express server is running on port 3001 and OpenRouter is reachable.'
-      }])
-      addToast('Backend not connected', 'error')
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        const friendlyMessage = error.message || 'Could not reach the assistant. Check that the backend is running.'
+        commitMessages(conversationId, [...userMessages, { role: 'assistant', content: friendlyMessage }])
+        addToast('The assistant could not respond', 'error')
+      }
     } finally {
       setLoading(false)
+      abortCtrlRef.current = null
     }
   }
 
+  const regenerate = () => {
+    const current = messagesRef.current
+    let userIndex = -1
+    for (let index = current.length - 1; index >= 0; index -= 1) {
+      if (current[index].role === 'user') { userIndex = index; break }
+    }
+    if (userIndex < 0) return
+    const priorMessages = current.slice(0, userIndex + 1)
+    const prompt = current[userIndex].content
+    commitMessages(conversationIdRef.current, priorMessages)
+    sendMessage(prompt, { baseMessages: priorMessages, addUser: false })
+  }
 
-  const handleKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
+  const handleKeyDown = event => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      sendMessage()
+    }
+  }
+
+  const handleFileUpload = async event => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    setAttachMenuOpen(false)
+    if (!file) return
+    const extension = file.name.split('.').pop()?.toLowerCase()
+    if (!['pdf', 'docx', 'txt'].includes(extension)) {
+      addToast('Choose a PDF, DOCX, or TXT document.', 'error')
+      return
+    }
+
+    setUploading(true)
+    const form = new FormData()
+    form.append('file', file)
+    try {
+      const response = await fetch(apiUrl('/api/rag/upload'), { method: 'POST', body: form })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || `Upload failed (${response.status}).`)
+
+      const storedDocs = JSON.parse(localStorage.getItem('gyan-ai-documents') || '[]')
+      const nextDocs = [
+        { name: file.name, size: file.size, status: 'indexed', uploadedAt: Date.now() },
+        ...storedDocs.filter(item => item.name !== file.name),
+      ]
+      localStorage.setItem('gyan-ai-documents', JSON.stringify(nextDocs))
+      addToast(`${file.name} added to your knowledge base`)
+      onNavigate('rag')
+    } catch (error) {
+      addToast(error.message || 'Document upload failed', 'error')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const copyMessage = async (message, index) => {
+    try {
+      await navigator.clipboard.writeText(message.content)
+      setCopiedMessage(index)
+      window.setTimeout(() => setCopiedMessage(null), 1400)
+      addToast('Response copied')
+    } catch {
+      addToast('Could not copy to clipboard', 'error')
+    }
   }
 
   return (
-    <div className="chat-container">
-      {/* Header */}
-      <div className="chat-header">
-        <AnimatedTitle title="AI Chat" accentWord="Chat" />
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <div className="model-badge">🌐 OpenRouter</div>
-          <button className="clear-btn" onClick={() => setMessages([])}>🗑️ Clear</button>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div className="messages-area">
-        {messages.length === 0 ? (
-          <div className="chat-empty-hero">
-            <div className="hero-line from-left">
-              <span className="hero-accent">Gyan AI</span> — Your intelligent companion
-            </div>
-            <div className="hero-line from-right">
-              Ask anything. Learn everything.
-            </div>
-            <div className="hero-line from-left">
-              Powered by <span className="hero-accent">OpenRouter</span> &amp; local models
-            </div>
-            <div className="hero-line from-right">
-              Summarize · Generate · Analyze · Create
-            </div>
-            <div className="hero-line from-left">
-              Type below to begin your <span className="hero-accent">conversation</span>
-            </div>
+    <section className="chat-workspace workspace-view">
+      {messages.length === 0 ? (
+        <div className="chat-welcome">
+          <p className="eyebrow welcome-eyebrow">A thoughtful space for your work</p>
+          <h1>What would you like<br className="welcome-break" /> to work on?</h1>
+          <p className="welcome-copy">Ask a question, shape an idea, or get a hand with something you are creating.</p>
+          <div className="suggestion-list" aria-label="Suggested prompts">
+            {SUGGESTIONS.map(item => (
+              <button key={item.label} className="suggestion-button" onClick={() => sendMessage(item.prompt)}>
+                <span>{item.label}</span><ChevronRight size={16} />
+              </button>
+            ))}
           </div>
-
-        ) : (
-          messages.map((m, i) => (
-            <div key={i} className={`message ${m.role === 'user' ? 'user' : ''}`}>
-              <div className={`avatar ${m.role === 'user' ? 'user' : 'ai'}`}>
-                {m.role === 'user' ? '👤' : '🧠'}
-              </div>
-              <div className={`bubble ${m.role === 'user' ? 'user' : 'ai'}`}>
-                {m.role === 'user' ? (
-                  m.content
-                ) : (
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkMath]}
-                    rehypePlugins={[rehypeKatex]}
-                    components={{
-                      // Custom code block rendering with copy button
-                      code({ node, inline, className, children, ...props }) {
-                        const match = /language-(\w+)/.exec(className || '')
-                        if (!inline && match) {
-                          return (
-                            <div className="code-block-wrapper">
-                              <div className="code-block-header">
-                                <span className="code-lang">{match[1]}</span>
-                                <button
-                                  className="code-copy-btn"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(String(children).replace(/\n$/, ''))
-                                    addToast('Copied to clipboard!', 'success')
-                                  }}
-                                >
-                                  📋 Copy
-                                </button>
-                              </div>
-                              <pre className={className} {...props}>
-                                <code>{children}</code>
-                              </pre>
-                            </div>
-                          )
-                        }
-                        return (
-                          <code className={`inline-code ${className || ''}`} {...props}>
-                            {children}
-                          </code>
-                        )
-                      },
-                    }}
-                  >
-                    {m.content}
-                  </ReactMarkdown>
+        </div>
+      ) : (
+        <div className="chat-transcript" aria-live="polite">
+          {messages.map((message, index) => (
+            <article key={`${index}-${message.role}`} className={`message-row ${message.role === 'user' ? 'user-message' : 'assistant-message'}`}>
+              {message.role === 'assistant' && <div className="assistant-mark" aria-hidden="true"><BookIcon /></div>}
+              <div className="message-content">
+                {message.role === 'user' ? <p className="user-message-text">{message.content}</p> : (
+                  <div className="markdown-body">
+                    {message.content ? <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[rehypeKatex, rehypeHighlight]}
+                      components={{
+                        pre({ children, ...props }) {
+                          const codeElement = Array.isArray(children) ? children[0] : children
+                          const codeClass = codeElement?.props?.className || ''
+                          const language = /language-(\w+)/.exec(codeClass)?.[1] || 'Code'
+                          const codeText = String(codeElement?.props?.children ?? '').replace(/\n$/, '')
+                          return <div className="code-block-wrapper">
+                            <div className="code-block-header"><span>{language}</span><button onClick={() => { navigator.clipboard.writeText(codeText); addToast('Code copied') }}><Copy size={13} />Copy</button></div>
+                            <pre {...props}>{children}</pre>
+                          </div>
+                        },
+                        code({ className, children, ...props }) {
+                          const isBlock = /language-|hljs/.test(className || '')
+                          return <code className={isBlock ? className : `inline-code ${className || ''}`} {...props}>{children}</code>
+                        },
+                      }}
+                    >{message.content}</ReactMarkdown> : <span className="streaming-dots"><i /><i /><i /></span>}
+                  </div>
+                )}
+                {message.role === 'assistant' && message.content && !loading && (
+                  <div className="message-actions">
+                    <button className="text-action" onClick={() => copyMessage(message, index)} aria-label="Copy response">
+                      {copiedMessage === index ? <Check size={14} /> : <Copy size={14} />}{copiedMessage === index ? 'Copied' : 'Copy'}
+                    </button>
+                    {index === messages.length - 1 && <button className="text-action" onClick={regenerate} aria-label="Regenerate response"><RotateCcw size={14} />Regenerate</button>}
+                  </div>
                 )}
               </div>
-            </div>
-          ))
-        )}
+            </article>
+          ))}
+          <div ref={bottomRef} />
+        </div>
+      )}
 
-        {loading && (
-          <div className="message">
-            <div className="avatar ai">🧠</div>
-            <div className="bubble ai">
-              <div className="typing-indicator">
-                <span /><span /><span />
+      <div className="composer-wrap">
+        <div className={`chat-composer ${loading ? 'is-generating' : ''}`}>
+          <textarea
+            ref={textareaRef}
+            className="composer-input"
+            aria-label="Message Gyan AI"
+            placeholder="Message Gyan AI…"
+            value={input}
+            rows={1}
+            onChange={event => {
+              setInput(event.target.value)
+              event.target.style.height = 'auto'
+              event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`
+            }}
+            onKeyDown={handleKeyDown}
+            disabled={uploading}
+          />
+          <div className="composer-toolbar">
+            <div className="composer-tools">
+              <div className="attach-wrap">
+                <button className="composer-tool-button" onClick={() => setAttachMenuOpen(open => !open)} aria-label="Add a file or choose a workspace" aria-expanded={attachMenuOpen}>
+                  {uploading ? <LoaderCircle size={17} className="spin-icon" /> : <Paperclip size={17} />}<span>{uploading ? 'Uploading PDF' : 'Add'}</span>
+                </button>
+                {attachMenuOpen && <>
+                  <button className="menu-dismiss" aria-label="Close add menu" onClick={() => setAttachMenuOpen(false)} />
+                  <div className="composer-menu">
+                    <button onClick={() => fileRef.current?.click()}><FileText size={17} /><span><b>Upload a document</b><small>PDF, DOCX, or TXT · index it for questions</small></span></button>
+                    {WORKSPACES.slice(1).map(({ id, label, detail, icon: Icon }) => <button key={id} onClick={() => { setAttachMenuOpen(false); onNavigate(id) }}><Icon size={17} /><span><b>{label}</b><small>{detail}</small></span></button>)}
+                  </div>
+                </>}
               </div>
+              <input ref={fileRef} type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" hidden onChange={handleFileUpload} />
+              <span className="composer-divider" />
+              <span className="model-indicator">OpenRouter</span>
             </div>
+            <button
+              className={`send-button ${loading ? 'stop-button' : ''}`}
+              aria-label={loading ? 'Stop response' : 'Send message'}
+              title={loading ? 'Stop generating' : 'Send message'}
+              disabled={!loading && !input.trim()}
+              onClick={() => loading ? abortCtrlRef.current?.abort() : sendMessage()}
+            >
+              {loading ? <Square size={15} fill="currentColor" /> : <ArrowUp size={18} strokeWidth={2.2} />}
+            </button>
           </div>
-        )}
-
-        <div ref={bottomRef} />
+        </div>
+        <p className="composer-hint">Enter to send <span>·</span> Shift + Enter for a new line</p>
       </div>
-
-      {/* Input */}
-      <div className="chat-input-area">
-        <textarea
-          id="chat-input"
-          className="chat-input"
-          placeholder="Send a message… (Enter to send, Shift+Enter for newline)"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKey}
-          rows={1}
-        />
-        {loading ? (
-          <button
-            id="stop-btn"
-            className="send-btn"
-            style={{ background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)', color: 'var(--error)' }}
-            onClick={() => abortCtrlRef.current?.abort()}
-            title="Stop generating"
-          >
-            ■
-          </button>
-        ) : (
-          <button
-            id="send-btn"
-            className="send-btn"
-            disabled={!input.trim()}
-            onClick={() => sendMessage()}
-          >
-            ➤
-          </button>
-        )}
-      </div>
-    </div>
+    </section>
   )
+}
+
+function BookIcon() {
+  return <BookOpen size={16} strokeWidth={1.9} />
 }

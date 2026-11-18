@@ -2,7 +2,7 @@ import { analyzeImage } from '../services/llmService.js';
 
 export const visionRouter = async (req, res) => {
   try {
-    const { image } = req.body;
+    const { image, prompt } = req.body;
     if (!image) {
       return res.status(400).json({ error: 'No image provided' });
     }
@@ -10,7 +10,7 @@ export const visionRouter = async (req, res) => {
     console.log(`[Vision] Analyzing image (${(image.length / 1024).toFixed(1)} KB)...`);
 
     // The 'image' field is expected to be a Base64 string (without the data:image/jpeg;base64, prefix)
-    const description = await analyzeImage(image);
+    const description = await analyzeImage(image, typeof prompt === 'string' ? prompt.trim() || undefined : undefined);
 
     res.json({ description });
   } catch (error) {

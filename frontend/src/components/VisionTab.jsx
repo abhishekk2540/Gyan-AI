@@ -1,91 +1,68 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
-import AnimatedTitle from './AnimatedTitle'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Camera, Check, Image as ImageIcon, LoaderCircle, ScanEye, Sparkles, Upload, X } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { apiUrl } from '../lib/api'
+
+const MODEL_SCRIPTS = [
+  'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js',
+  'https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js',
+]
+const DETECTION_COLORS = ['#C66A45', '#43866B', '#AA803D', '#6B836A', '#A76858', '#718173']
 
 export default function VisionTab({ addToast }) {
-  const videoRef   = useRef(null)
-  const canvasRef  = useRef(null)
-  const modelRef   = useRef(null)
-  const animRef    = useRef(null)
-  const streamRef  = useRef(null)
-
-  const [isOn,       setIsOn]       = useState(false)
-  const [modelReady, setModelReady] = useState(false)
-  const [loading,    setLoading]    = useState(false)
-  const [detections, setDetections] = useState([])
-  const [fps,        setFps]        = useState(0)
+  const videoRef = useRef(null)
+  const canvasRef = useRef(null)
+  const modelRef = useRef(null)
+  const animRef = useRef(null)
+  const streamRef = useRef(null)
+  const fileInputRef = useRef(null)
   const fpsRef = useRef({ count: 0, last: Date.now() })
-
-  const [analysis,  setAnalysis]  = useState(null)
+  const [mode, setMode] = useState('upload')
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState('')
+  const [prompt, setPrompt] = useState('Describe the important details in this image.')
+  const [analysis, setAnalysis] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
+  const [isOn, setIsOn] = useState(false)
+  const [modelReady, setModelReady] = useState(false)
+  const [modelLoading, setModelLoading] = useState(false)
+  const [detections, setDetections] = useState([])
+  const [fps, setFps] = useState(0)
 
-  // Lazy-load TensorFlow.js + COCO-SSD from CDN
-  const loadModel = useCallback(async () => {
-    if (modelRef.current) return true
-    setLoading(true)
-    try {
-      await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js')
-      await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js')
-      modelRef.current = await window.cocoSsd.load()
-      setModelReady(true)
-      addToast('COCO-SSD model loaded ✅')
-      return true
-    } catch (err) {
-      addToast('Failed to load model', 'error')
-      return false
-    } finally {
-      setLoading(false)
-    }
-  }, [addToast])
-
-  const startCamera = async () => {
-    const ok = await loadModel()
-    if (!ok) return
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } })
-      streamRef.current = stream
-      videoRef.current.srcObject = stream
-      await videoRef.current.play()
-      setIsOn(true)
-      runDetection()
-    } catch {
-      addToast('Camera access denied', 'error')
-    }
-  }
-
-  const stopCamera = () => {
-    cancelAnimationFrame(animRef.current)
-    streamRef.current?.getTracks().forEach(t => t.stop())
+  const stopCamera = useCallback(() => {
+    if (animRef.current) cancelAnimationFrame(animRef.current)
+    streamRef.current?.getTracks().forEach(track => track.stop())
+    streamRef.current = null
     setIsOn(false)
     setDetections([])
-    setAnalysis(null)
-    const ctx = canvasRef.current?.getContext('2d')
-    ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
-  }
+    const canvas = canvasRef.current
+    canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
+  }, [])
 
-  const analyzeFrame = async () => {
-    if (!videoRef.current || analyzing) return
-    setAnalyzing(true)
+  useEffect(() => () => {
+    if (animRef.current) cancelAnimationFrame(animRef.current)
+    streamRef.current?.getTracks().forEach(track => track.stop())
+  }, [])
+
+  useEffect(() => {
+    if (!preview.startsWith('blob:')) return undefined
+    return () => URL.revokeObjectURL(preview)
+  }, [preview])
+
+  const loadModel = async () => {
+    if (modelRef.current) return true
+    setModelLoading(true)
     try {
-      const canvas = document.createElement('canvas')
-      canvas.width = videoRef.current.videoWidth
-      canvas.height = videoRef.current.videoHeight
-      const ctx = canvas.getContext('2d')
-      ctx.drawImage(videoRef.current, 0, 0)
-      const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1]
-
-      const res = await fetch('/api/vision/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64 })
-      })
-      if (!res.ok) throw new Error()
-      const data = await res.json()
-      setAnalysis(data.description)
-      addToast('Analysis complete!')
-    } catch {
-      addToast('Failed to analyze frame', 'error')
+      for (const src of MODEL_SCRIPTS) await loadScript(src)
+      modelRef.current = await window.cocoSsd.load()
+      setModelReady(true)
+      return true
+    } catch (error) {
+      addToast('Could not load the object detection model', 'error')
+      return false
     } finally {
-      setAnalyzing(false)
+      setModelLoading(false)
     }
   }
 
@@ -93,200 +70,215 @@ export default function VisionTab({ addToast }) {
     const video = videoRef.current
     const canvas = canvasRef.current
     if (!video || !canvas || !modelRef.current) return
-
-    canvas.width  = video.videoWidth  || 640
-    canvas.height = video.videoHeight || 480
-    const ctx = canvas.getContext('2d')
+    const context = canvas.getContext('2d')
 
     const detect = async () => {
-      if (!modelRef.current || video.paused || video.ended) return
-      const preds = await modelRef.current.detect(video)
-
-      // FPS counter
-      fpsRef.current.count++
-      const now = Date.now()
-      if (now - fpsRef.current.last >= 1000) {
-        setFps(fpsRef.current.count)
-        fpsRef.current = { count: 0, last: now }
+      if (!modelRef.current || !streamRef.current?.active) return
+      if (video.readyState >= 2) {
+        canvas.width = video.videoWidth || canvas.width || 640
+        canvas.height = video.videoHeight || canvas.height || 480
+        try {
+          const predictions = await modelRef.current.detect(video)
+          fpsRef.current.count += 1
+          const now = Date.now()
+          if (now - fpsRef.current.last >= 1000) {
+            setFps(fpsRef.current.count)
+            fpsRef.current = { count: 0, last: now }
+          }
+          context.clearRect(0, 0, canvas.width, canvas.height)
+          predictions.forEach((prediction, index) => {
+            const [x, y, width, height] = prediction.bbox
+            const color = DETECTION_COLORS[index % DETECTION_COLORS.length]
+            context.strokeStyle = color
+            context.lineWidth = Math.max(2, canvas.width / 640)
+            context.strokeRect(x, y, width, height)
+            context.font = '600 13px system-ui, sans-serif'
+            const label = `${prediction.class} · ${(prediction.score * 100).toFixed(0)}%`
+            const labelWidth = context.measureText(label).width + 16
+            const labelY = Math.max(0, y - 27)
+            context.fillStyle = color
+            context.fillRect(x, labelY, labelWidth, 26)
+            context.fillStyle = '#fff'
+            context.fillText(label, x + 8, labelY + 17)
+          })
+          setDetections(predictions.slice(0, 10).map(item => ({ label: item.class, score: (item.score * 100).toFixed(0) })))
+        } catch {
+          // A dropped frame is normal while the camera or model is warming up.
+        }
       }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-      preds.forEach(p => {
-        const [x, y, w, h] = p.bbox
-        const conf = (p.score * 100).toFixed(0)
-        const color = COLORS[p.class] || '#8b5cf6'
-
-        ctx.strokeStyle = color
-        ctx.lineWidth   = 2
-        ctx.strokeRect(x, y, w, h)
-
-        ctx.fillStyle = color + 'cc'
-        ctx.fillRect(x, y - 28, Math.max(w, 120), 28)
-
-        ctx.fillStyle = '#fff'
-        ctx.font      = 'bold 13px Inter, sans-serif'
-        ctx.fillText(`${p.class}  ${conf}%`, x + 8, y - 10)
-      })
-
-      setDetections(preds.slice(0, 10).map(p => ({
-        label: p.class,
-        conf: (p.score * 100).toFixed(1),
-      })))
-
       animRef.current = requestAnimationFrame(detect)
     }
-
     detect()
   }
 
-  useEffect(() => () => stopCamera(), [])
+  const startCamera = async () => {
+    const ready = await loadModel()
+    if (!ready) return
+    try {
+      const media = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } })
+      streamRef.current = media
+      if (videoRef.current) {
+        videoRef.current.srcObject = media
+        await videoRef.current.play()
+      }
+      setIsOn(true)
+      window.setTimeout(runDetection, 150)
+    } catch (error) {
+      addToast(error.name === 'NotAllowedError' ? 'Camera access was not allowed' : 'Could not start the camera', 'error')
+    }
+  }
+
+  const chooseFile = event => {
+    const nextFile = event.target.files?.[0]
+    event.target.value = ''
+    if (!nextFile) return
+    if (!nextFile.type.startsWith('image/')) {
+      addToast('Choose an image file to analyze', 'error')
+      return
+    }
+    if (nextFile.size > 6 * 1024 * 1024) {
+      addToast('Choose an image smaller than 6 MB', 'error')
+      return
+    }
+    if (preview.startsWith('blob:')) URL.revokeObjectURL(preview)
+    setFile(nextFile)
+    setPreview(URL.createObjectURL(nextFile))
+    setAnalysis('')
+  }
+
+  const analyzeImage = async () => {
+    if (analyzing) return
+    setAnalyzing(true)
+    setAnalysis('')
+    try {
+      const base64Image = mode === 'camera' ? await captureCameraFrame() : await imageFileToBase64(file)
+      if (!base64Image) throw new Error('Choose an image or start the camera first.')
+      const response = await fetch(apiUrl('/api/vision/analyze'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64Image, prompt: prompt.trim() }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || `Image analysis failed (${response.status}).`)
+      setAnalysis(data.description || 'No description was returned.')
+      addToast('Image analysis complete')
+    } catch (error) {
+      setAnalysis(error.message || 'Could not analyze this image.')
+      addToast(error.message || 'Image analysis failed', 'error')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const clearImage = () => {
+    if (preview.startsWith('blob:')) URL.revokeObjectURL(preview)
+    setFile(null)
+    setPreview('')
+    setAnalysis('')
+    setDetections([])
+  }
 
   return (
-    <div className="vision-container">
-      {/* Header */}
-      <div className="vision-header">
-        <AnimatedTitle title="Vision Detection" accentWord="Detection" />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {isOn && <div className="model-badge">⚡ {fps} FPS</div>}
-          <div className="model-badge">🧠 Multimodal AI</div>
-          <button className="clear-btn" onClick={() => { setAnalysis(null); setDetections([]) }}>🗑️ Clear</button>
-        </div>
+    <section className="vision-workspace workspace-view page-frame">
+      <div className="page-heading">
+        <div><p className="eyebrow">Image Analysis</p><h1>Look closer</h1><p className="page-description">Upload an image for a focused description, or open your camera for live object detection.</p></div>
+        <span className="capability-tag"><ScanEye size={15} />Vision</span>
       </div>
 
-      {/* ── 2-Column Layout ─────────────────────────────────── */}
+      <div className="vision-mode-switch" role="tablist" aria-label="Image source">
+        <button role="tab" aria-selected={mode === 'upload'} className={mode === 'upload' ? 'active' : ''} onClick={() => { stopCamera(); setMode('upload') }}><ImageIcon size={16} />Upload image</button>
+        <button role="tab" aria-selected={mode === 'camera'} className={mode === 'camera' ? 'active' : ''} onClick={() => { setMode('camera'); setAnalysis('') }}><Camera size={16} />Live camera</button>
+      </div>
+
       <div className="vision-layout">
-
-        {/* LEFT — Camera */}
-        <div className="vision-left">
-          <div className="camera-wrapper">
-            <video ref={videoRef} muted playsInline style={{ display: isOn ? 'block' : 'none' }} />
-            <canvas ref={canvasRef} style={{ display: isOn ? 'block' : 'none' }} />
-
-            {!isOn && (
-              <div className="camera-overlay-off">
-                <div className="cam-icon">📷</div>
-                <p>Camera is off</p>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>AI Visual Analysis · Real-time detection</p>
-              </div>
-            )}
-          </div>
-
-          {/* Controls below camera */}
-          <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-            {!isOn ? (
-              <button id="start-camera-btn" className="camera-btn start" onClick={startCamera} disabled={loading}>
-                {loading ? <><span className="spinner" style={{ marginRight: 8 }} />Loading Model…</> : '▶ Start Camera'}
-              </button>
-            ) : (
-              <>
-                <button id="stop-camera-btn" className="camera-btn stop" onClick={stopCamera}>
-                  ■ Stop Camera
-                </button>
-                <button className="btn-primary" onClick={analyzeFrame} disabled={analyzing}>
-                  {analyzing ? <><span className="spinner" style={{ marginRight: 8 }} />Analyzing…</> : '📸 Analyze Frame'}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* RIGHT — Analysis & Detections */}
-        <div className="vision-right">
-
-          {/* AI Analysis Result */}
-          <div className="vision-panel">
-            <div className="section-label">AI Frame Analysis</div>
-            {analyzing ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-muted)', fontSize: 13, padding: '12px 0' }}>
-                <span className="spinner" />Analyzing scene with GPT-4o…
-              </div>
-            ) : analysis ? (
-              <p style={{ fontSize: 14, lineHeight: 1.75, color: 'var(--text-primary)', animation: 'fadeUp 0.3s ease' }}>
-                {analysis}
-              </p>
-            ) : (
-              <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '12px 0' }}>
-                {isOn
-                  ? 'Press "Analyze Frame" to get an AI description of the current scene.'
-                  : 'Start the camera, then press "Analyze Frame".'}
-              </div>
-            )}
-          </div>
-
-          {/* Detected Objects */}
-          <div className="vision-panel" style={{ flex: 1 }}>
-            <div className="section-label">
-              Detected Objects {detections.length > 0 && `(${detections.length})`}
+        <div className="vision-input-column">
+          {mode === 'upload' ? (
+            <div className={`image-preview-area ${preview ? 'has-image' : ''}`} onClick={() => !preview && fileInputRef.current?.click()} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const next = event.dataTransfer.files?.[0]; if (next) chooseFile({ target: { files: [next], value: '' } }) }}>
+              <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={chooseFile} />
+              {preview ? <><img src={preview} alt="Selected image for analysis" />{!analyzing && <button className="preview-remove" onClick={event => { event.stopPropagation(); clearImage() }} aria-label="Remove image"><X size={16} /></button>}</> : <div className="image-upload-prompt"><span className="large-upload-icon"><Upload size={20} /></span><strong>Choose an image to analyze</strong><span>Browse files or drag an image here</span><small>PNG, JPG, WebP · up to 6 MB</small><button onClick={event => { event.stopPropagation(); fileInputRef.current?.click() }}>Select image</button></div>}
             </div>
-            {detections.length > 0 ? (
-              <div className="detections-grid">
-                {detections.map((d, i) => (
-                  <div key={i} className="detection-tag">
-                    <span>{getEmoji(d.label)}</span>
-                    <span>{d.label}</span>
-                    <span className="detection-conf">{d.conf}%</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '12px 0' }}>
-                {isOn
-                  ? 'Point your camera at objects to detect them…'
-                  : 'Objects will appear here once camera is active.'}
-              </div>
-            )}
-          </div>
-
-          {/* Stats */}
-          {isOn && (
-            <div className="vision-panel vision-stats">
-              <div className="stat-row">
-                <span className="stat-label">FPS</span>
-                <span className="stat-value" style={{ color: fps >= 15 ? 'var(--success)' : 'var(--accent3)' }}>{fps}</span>
-              </div>
-              <div className="stat-row">
-                <span className="stat-label">Objects</span>
-                <span className="stat-value">{detections.length}</span>
-              </div>
-              <div className="stat-row">
-                <span className="stat-label">Model</span>
-                <span className="stat-value" style={{ color: 'var(--accent)' }}>COCO-SSD</span>
-              </div>
-              <div className="stat-row">
-                <span className="stat-label">Engine</span>
-                <span className="stat-value" style={{ color: 'var(--accent2)' }}>TF.js</span>
-              </div>
+          ) : (
+            <div className={`camera-stage ${isOn ? 'camera-active' : ''}`}>
+              <video ref={videoRef} muted playsInline />
+              <canvas ref={canvasRef} />
+              {!isOn && <div className="camera-placeholder"><Camera size={23} /><strong>Camera is off</strong><span>Start the camera to see live object detection.</span>{modelReady && <small>Detection model ready</small>}</div>}
+              {isOn && <div className="camera-live-indicator"><span />Live{fps > 0 ? ` · ${fps} fps` : ''}</div>}
             </div>
           )}
+
+          <label className="vision-prompt-label" htmlFor="vision-prompt">What should I look for?</label>
+          <textarea id="vision-prompt" className="vision-prompt" value={prompt} rows={2} onChange={event => setPrompt(event.target.value)} placeholder="Ask for a focused description…" />
+          <div className="vision-actions">
+            {mode === 'camera' ? <button className={`secondary-button ${isOn ? 'stop-camera-button' : ''}`} onClick={isOn ? stopCamera : startCamera} disabled={modelLoading}>{modelLoading ? <LoaderCircle size={16} className="spin-icon" /> : <Camera size={16} />}{modelLoading ? 'Loading model…' : isOn ? 'Stop camera' : 'Start camera'}</button> : <span className="supported-format"><Check size={14} />Image stays in this session</span>}
+            <button className="primary-button" onClick={analyzeImage} disabled={analyzing || (mode === 'upload' ? !file : !isOn)}>{analyzing ? <LoaderCircle size={16} className="spin-icon" /> : <Sparkles size={16} />}{analyzing ? 'Analyzing…' : 'Analyze image'}</button>
+          </div>
+        </div>
+
+        <div className="vision-result-column">
+          <div className="vision-result-panel">
+            <div className="result-panel-heading"><span className="result-heading-icon"><Sparkles size={15} /></span><div><h2>Analysis</h2><p>Image understanding</p></div></div>
+            <div className="vision-result-body">
+              {analyzing ? <div className="analysis-loading"><LoaderCircle size={17} className="spin-icon" /><span>Looking at the image…</span></div> : analysis ? <div className="markdown-body analysis-copy"><ReactMarkdown remarkPlugins={[remarkGfm]}>{analysis}</ReactMarkdown></div> : <div className="analysis-empty"><span>Analysis will appear here</span><small>Choose an image and tell Gyan what details matter.</small></div>}
+            </div>
+          </div>
+
+          {mode === 'camera' && <div className="vision-result-panel detected-panel">
+            <div className="result-panel-heading"><span className="result-heading-icon"><ScanEye size={15} /></span><div><h2>Detected objects</h2><p>{detections.length ? `${detections.length} visible` : 'Live camera detection'}</p></div></div>
+            {detections.length ? <div className="detection-list">{detections.map((item, index) => <div className="detection-row" key={`${item.label}-${index}`}><span className="detection-dot" style={{ background: DETECTION_COLORS[index % DETECTION_COLORS.length] }} /><span>{item.label}</span><span className="detection-score">{item.score}%</span></div>)}</div> : <p className="detection-empty">Detected objects and confidence scores will show here.</p>}
+          </div>}
+
+          <p className="vision-disclaimer">Image descriptions may miss context. Review details that matter.</p>
         </div>
       </div>
-    </div>
+    </section>
   )
 }
 
-// Helper: load a script dynamically
 function loadScript(src) {
   return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
-    const s = document.createElement('script')
-    s.src = src; s.async = true
-    s.onload = resolve; s.onerror = reject
-    document.head.appendChild(s)
+    const existing = document.querySelector(`script[src="${src}"]`)
+    if (existing?.dataset.loaded === 'true') { resolve(); return }
+    if (existing) { existing.addEventListener('load', resolve, { once: true }); existing.addEventListener('error', reject, { once: true }); return }
+    const script = document.createElement('script')
+    script.src = src
+    script.async = true
+    script.onload = () => { script.dataset.loaded = 'true'; resolve() }
+    script.onerror = reject
+    document.head.appendChild(script)
   })
 }
 
-const COLORS = {
-  person: '#8b5cf6', car: '#06b6d4', dog: '#f59e0b', cat: '#10b981',
-  chair: '#ec4899', laptop: '#3b82f6', phone: '#f97316', book: '#84cc16',
-  bottle: '#a855f7', cup: '#14b8a6',
+function imageFileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) { resolve(''); return }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const image = new Image()
+      image.onload = () => {
+        const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(image.naturalWidth * scale)
+        canvas.height = Math.round(image.naturalHeight * scale)
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.82).split(',')[1])
+      }
+      image.onerror = reject
+      image.src = reader.result
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 }
 
-function getEmoji(label) {
-  const map = {
-    person: '🧑', car: '🚗', dog: '🐕', cat: '🐈', chair: '🪑',
-    laptop: '💻', 'cell phone': '📱', book: '📖', bottle: '🍶',
-    cup: '☕', bicycle: '🚲', bird: '🐦', horse: '🐴', tv: '📺',
-  }
-  return map[label] || '📦'
+function captureCameraFrame() {
+  return new Promise((resolve, reject) => {
+    const video = document.querySelector('.camera-stage video')
+    if (!video?.videoWidth) { resolve(''); return }
+    const canvas = document.createElement('canvas')
+    const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight))
+    canvas.width = Math.round(video.videoWidth * scale)
+    canvas.height = Math.round(video.videoHeight * scale)
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
+    try { resolve(canvas.toDataURL('image/jpeg', 0.82).split(',')[1]) } catch (error) { reject(error) }
+  })
 }

@@ -12,12 +12,21 @@ import { initStore } from './services/vectorStore.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const frontendOrigins = (process.env.FRONTEND_ORIGINS || '')
+  .split(',')
+  .map(origin => origin.trim().replace(/\/$/, ''))
+  .filter(Boolean);
 
 // Initialize Vector Store
 initStore();
 
 // Middleware
-app.use(cors());
+app.use(cors(frontendOrigins.length ? {
+  origin(origin, callback) {
+    if (!origin || frontendOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Origin is not allowed by CORS'));
+  },
+} : undefined));
 app.use(express.json({ limit: '10mb' })); // Increased limit for vision images
 app.use(morgan('dev')); // Clean logging of requests
 app.use(fileUpload()); // Handles file uploads natively without Multer bugs
